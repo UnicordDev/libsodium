@@ -21,18 +21,14 @@
 
 #if defined(HAVE_TMMINTRIN_H) && defined(HAVE_WMMINTRIN_H)
 
-# ifdef __GNUC__
-#  pragma GCC target("ssse3")
-#  pragma GCC target("aes")
-#  pragma GCC target("pclmul")
-# endif
+#ifdef __GNUC__
+# pragma GCC target("ssse3")
+# pragma GCC target("aes")
+# pragma GCC target("pclmul")
+#endif
 
 #include <tmmintrin.h>
 #include <wmmintrin.h>
-
-#ifndef ENOSYS
-# define ENOSYS ENXIO
-#endif
 
 #if defined(__INTEL_COMPILER) || defined(_bswap64)
 #elif defined(_MSC_VER)
@@ -918,6 +914,10 @@ crypto_aead_aes256gcm_is_available(void)
 }
 
 #else
+
+#ifndef ENOSYS
+# define ENOSYS ENXIO
+#endif
 
 int
 crypto_aead_aes256gcm_encrypt_detached(unsigned char *c,

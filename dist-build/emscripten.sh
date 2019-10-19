@@ -14,6 +14,7 @@ export LDFLAGS="${LDFLAGS} -s ASSERTIONS=0"
 export LDFLAGS="${LDFLAGS} -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s ALIASING_FUNCTION_POINTERS=1"
 export LDFLAGS="${LDFLAGS} -s DISABLE_EXCEPTION_CATCHING=1"
 export LDFLAGS="${LDFLAGS} -s ELIMINATE_DUPLICATE_FUNCTIONS=1"
+export LDFLAGS="${LDFLAGS} -s NODEJS_CATCH_EXIT=0"
 export CFLAGS="-Os"
 
 echo
@@ -115,17 +116,28 @@ if [ "$DIST" = yes ]; then
         }
       };
       Module.useBackupModule = function() {
-        var Module = _Module;
-        Object.keys(Module).forEach(function(k) {
-          if (k !== 'getRandomValue') {
-            delete Module[k];
-          }
+        return new Promise(function(resolve, reject) {
+          var Module = {};
+          Module.onAbort = reject;
+
+          Module.onRuntimeInitialized = function() {
+            Object.keys(_Module).forEach(function(k) {
+              if (k !== 'getRandomValue') {
+                delete _Module[k];
+              }
+            });
+            Object.keys(Module).forEach(function(k) {
+              _Module[k] = Module[k];
+            });
+            resolve();
+          };
+
+          $(cat "${PREFIX}/lib/libsodium.asm.tmp.js" | sed 's|use asm||g')
         });
-        $(cat "${PREFIX}/lib/libsodium.asm.tmp.js" | sed 's|use asm||g')
       };
       $(cat "${PREFIX}/lib/libsodium.wasm.tmp.js")
     }).catch(function() {
-      _Module.useBackupModule();
+      return _Module.useBackupModule();
     });
 EOM
 

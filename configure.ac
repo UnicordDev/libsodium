@@ -605,7 +605,7 @@ __asm__ __volatile__ ("" : : "r"(pnt) : "memory");
 HAVE_AMD64_ASM_V=0
 AS_IF([test "$enable_asm" != "no"],[
   AC_MSG_CHECKING(whether we can use x86_64 asm code)
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ]], [[
 #if defined(__amd64) || defined(__amd64__) || defined(__x86_64__)
 # if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32) || defined(_WIN64)
@@ -634,7 +634,7 @@ AC_SUBST(HAVE_AMD64_ASM_V)
 HAVE_AVX_ASM_V=0
 AS_IF([test "$enable_asm" != "no"],[
   AC_MSG_CHECKING(whether we can assemble AVX opcodes)
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ]], [[
 #if defined(__amd64) || defined(__amd64__) || defined(__x86_64__)
 # if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32) || defined(_WIN64)
@@ -694,7 +694,7 @@ AC_SUBST(HAVE_TI_MODE_V)
 HAVE_CPUID_V=0
 AS_IF([test "$enable_asm" != "no"],[
   AC_MSG_CHECKING(for cpuid instruction)
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[ ]], [[
 unsigned int cpu_info[4];
 __asm__ __volatile__ ("xchgl %%ebx, %k1; cpuid; xchgl %%ebx, %k1" :
                       "=a" (cpu_info[0]), "=&r" (cpu_info[1]),
@@ -761,23 +761,6 @@ void f(void *x) { __dummy(x); }
 [AC_MSG_RESULT(yes)
  AC_DEFINE([HAVE_WEAK_SYMBOLS], [1], [weak symbols are supported])],
 [AC_MSG_RESULT(no)])
-
-AC_MSG_CHECKING(if data alignment is required)
-aligned_access_required=yes
-AS_CASE([$host_cpu],
-  [i?86|amd64|x86_64|powerpc*|s390*],
-    [aligned_access_required=no],
-  [arm*],
-    [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-#ifndef __ARM_FEATURE_UNALIGNED
-# error data alignment is required
-#endif
-      ]], [[]])], [aligned_access_required=no], [])]
-)
-AS_IF([test "x$aligned_access_required" = "xyes"],
-  [AC_MSG_RESULT(yes)],
-  [AC_MSG_RESULT(no)
-   AC_DEFINE([CPU_UNALIGNED_ACCESS], [1], [unaligned memory access is supported])])
 
 AC_MSG_CHECKING(if atomic operations are supported)
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[ ]], [[
