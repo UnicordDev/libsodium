@@ -14,10 +14,10 @@ AM_DEP_TRACK
 
 AC_SUBST(VERSION)
 
-SODIUM_LIBRARY_VERSION_MAJOR=10
-SODIUM_LIBRARY_VERSION_MINOR=3
-DLL_VERSION=24
-SODIUM_LIBRARY_VERSION=26:0:3
+SODIUM_LIBRARY_VERSION_MAJOR=11
+SODIUM_LIBRARY_VERSION_MINOR=0
+DLL_VERSION=27
+SODIUM_LIBRARY_VERSION=27:0:0
 #                       | | |
 #                +------+ | +---+
 #                |        |     |
@@ -43,6 +43,10 @@ dnl Path check
 AS_IF([pwd | fgrep ' ' > /dev/null 2>&1],
   [AC_MSG_ERROR([The build directory contains whitespaces - This can cause tests/installation to fail due to limitations of some libtool versions])]
 )
+
+AC_PROG_CC_C99
+AM_PROG_AS
+AC_USE_SYSTEM_EXTENSIONS
 
 dnl Switches
 
@@ -210,17 +214,11 @@ AX_VALGRIND_CHECK
 
 dnl Checks
 
-AC_PROG_CC_C99
-AM_PROG_AS
-AC_USE_SYSTEM_EXTENSIONS
 AC_C_VARARRAYS
 
 AC_CHECK_DEFINE([__wasi__], [WASI="yes"], [])
 
-AC_CHECK_DEFINE([_FORTIFY_SOURCE], [], [
-  AX_CHECK_COMPILE_FLAG([-D_FORTIFY_SOURCE=2],
-    [CPPFLAGS="$CPPFLAGS -D_FORTIFY_SOURCE=2"])
-])
+AS_CASE([$host_os], [linux-gnu], [AX_ADD_FORTIFY_SOURCE], [ ])
 
 AX_CHECK_COMPILE_FLAG([-fvisibility=hidden],
   [CFLAGS="$CFLAGS -fvisibility=hidden"])
@@ -343,9 +341,11 @@ AX_CHECK_COMPILE_FLAG([$CWFLAGS -Wswitch-enum], [CWFLAGS="$CWFLAGS -Wswitch-enum
 AX_CHECK_COMPILE_FLAG([$CWFLAGS -Wvariable-decl], [CWFLAGS="$CWFLAGS -Wvariable-decl"])
 AX_CHECK_COMPILE_FLAG([$CWFLAGS -Wwrite-strings], [CWFLAGS="$CWFLAGS -Wwrite-strings"])
 
-AX_CHECK_LINK_FLAG([-Wl,-z,relro], [LDFLAGS="$LDFLAGS -Wl,-z,relro"])
-AX_CHECK_LINK_FLAG([-Wl,-z,now], [LDFLAGS="$LDFLAGS -Wl,-z,now"])
-AX_CHECK_LINK_FLAG([-Wl,-z,noexecstack], [LDFLAGS="$LDFLAGS -Wl,-z,noexecstack"])
+AS_IF([test "x$EMSCRIPTEN" = "x"], [
+  AX_CHECK_LINK_FLAG([-Wl,-z,relro], [LDFLAGS="$LDFLAGS -Wl,-z,relro"])
+  AX_CHECK_LINK_FLAG([-Wl,-z,now], [LDFLAGS="$LDFLAGS -Wl,-z,now"])
+  AX_CHECK_LINK_FLAG([-Wl,-z,noexecstack], [LDFLAGS="$LDFLAGS -Wl,-z,noexecstack"])
+])
 
 AX_CHECK_CATCHABLE_SEGV
 AX_CHECK_CATCHABLE_ABRT
@@ -365,6 +365,20 @@ AC_CHECK_TOOL([AR], [ar], [ar])
 dnl Checks for headers
 
 AS_IF([test "x$EMSCRIPTEN" = "x"], [
+
+  AS_IF([test "$host_cpu" = "aarch64"], [
+    oldcflags="$CFLAGS"
+    AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [CFLAGS="$CFLAGS -march=armv8-a+crypto"])
+    AC_MSG_CHECKING(for ARM crypto instructions set)
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <arm_neon.h>
+]], [[ vaeseq_u8(vmovq_n_u8(0), vmovq_n_u8(__ARM_FEATURE_CRYPTO)) ]])],
+      [AC_MSG_RESULT(yes)
+       AC_DEFINE([HAVE_ARMCRYPTO], [1], [ARM crypto extensions are available])
+       AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [CFLAGS_ARMCRYPTO="-march=armv8-a+crypto"])],
+      [AC_MSG_RESULT(no)])
+    CFLAGS="$oldcflags"
+  ])
 
   oldcflags="$CFLAGS"
   AX_CHECK_COMPILE_FLAG([-mmmx], [CFLAGS="$CFLAGS -mmmx"])
@@ -542,6 +556,7 @@ __m512i y = _mm512_permutexvar_epi64(_mm512_setr_epi64(0, 1, 4, 5, 2, 3, 6, 7), 
 
 ])
 
+AC_SUBST(CFLAGS_ARMCRYPTO)
 AC_SUBST(CFLAGS_MMX)
 AC_SUBST(CFLAGS_SSE2)
 AC_SUBST(CFLAGS_SSE3)
@@ -554,7 +569,7 @@ AC_SUBST(CFLAGS_AESNI)
 AC_SUBST(CFLAGS_PCLMUL)
 AC_SUBST(CFLAGS_RDRAND)
 
-AC_CHECK_HEADERS([sys/mman.h sys/random.h intrin.h])
+AC_CHECK_HEADERS([sys/mman.h sys/random.h intrin.h sys/auxv.h])
 
 AC_MSG_CHECKING([if _xgetbv() is available])
 AC_LINK_IFELSE(
@@ -791,7 +806,9 @@ AS_IF([test "x$EMSCRIPTEN" = "x"],[
 #endif
 ]], [[
 unsigned char buf;
-(void) getrandom((void *) &buf, 1U, 0U);
+if (&getrandom != NULL) {
+  (void) getrandom((void *) &buf, 1U, 0U);
+}
   ]])],
   [AC_MSG_RESULT(yes)
    AC_CHECK_FUNCS([getrandom])],
@@ -809,7 +826,9 @@ unsigned char buf;
 #endif
 ]], [[
 unsigned char buf;
-(void) getentropy((void *) &buf, 1U);
+if (&getentropy != NULL) {
+  (void) getentropy((void *) &buf, 1U);
+}
   ]])],
   [AC_MSG_RESULT(yes)
    AC_CHECK_FUNCS([getentropy])],
@@ -818,6 +837,7 @@ unsigned char buf;
 ])
 AC_CHECK_FUNCS([posix_memalign getpid nanosleep])
 AC_CHECK_FUNCS([memset_s explicit_bzero explicit_memset])
+AC_CHECK_FUNCS([getauxval])
 
 AC_SUBST([LIBTOOL_EXTRA_FLAGS])
 
@@ -851,7 +871,6 @@ AS_IF([test "x$ENABLE_CWFLAGS" = "xyes"], [
 
 AC_CONFIG_FILES([Makefile
                  builds/Makefile
-                 contrib/Makefile
                  dist-build/Makefile
                  libsodium.pc
                  libsodium-uninstalled.pc
