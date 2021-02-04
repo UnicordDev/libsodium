@@ -46,7 +46,10 @@ if [ -s configure ]; then
     exit 0
   fi
 elif [ "$dev_setup" != true ]; then
-  echo "A development environment was not created."
+  echo "If you are looking to install a stable version of libsodium,"
+  echo "please do not run arbitrary, undocumented commands."
+  echo
+  echo "Installation instructions are available at https://libsodium.org"
   exit 0
 fi
 
@@ -103,10 +106,12 @@ fi
 
   curl -sSL --fail -o config.guess \
     'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD' &&
-    mv -f config.guess build-aux/config.guess
+    chmod +x config.guess &&
+    chmod +x build-aux/config.guess
 
   curl -sSL --fail -o config.sub \
     'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD' &&
+    chmod +x build-aux/config.sub &&
     mv -f config.sub build-aux/config.sub
 
   echo "Done."

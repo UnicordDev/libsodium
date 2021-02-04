@@ -91,7 +91,7 @@ AC_ARG_ENABLE(pie,
 [AS_HELP_STRING(--disable-pie,Do not produce position independent executables)],
  enable_pie=$enableval, enable_pie="maybe")
 
-AS_CASE([$host_os], [mingw*|cygwin*|msys], [enable_pie="no"])
+AS_CASE([$host_os], [mingw*|cygwin*|msys|eabi*], [enable_pie="no"])
 
 AC_ARG_ENABLE(blocking-random,
 [AS_HELP_STRING(--enable-blocking-random,Enable this switch only if /dev/urandom is totally broken on the target platform)],
@@ -223,7 +223,7 @@ AS_CASE([$host_os], [linux-gnu], [AX_ADD_FORTIFY_SOURCE], [ ])
 AX_CHECK_COMPILE_FLAG([-fvisibility=hidden],
   [CFLAGS="$CFLAGS -fvisibility=hidden"])
 
-AS_CASE([$host_os], [cygwin*|mingw*|msys|pw32*|cegcc*], [ ], [
+AS_CASE([$host_os], [cygwin*|mingw*|msys|pw32*|cegcc*|eabi*], [ ], [
   AX_CHECK_COMPILE_FLAG([-fPIC], [CFLAGS="$CFLAGS -fPIC"])
 ])
 
@@ -276,7 +276,7 @@ AS_CASE([$host_os],
   ])
 
 AS_CASE([$host_os],
-  [cygwin*|mingw*|msys|pw32*|cegcc*], [
+  [cygwin*|mingw*|msys|pw32*|cegcc*|eabi*], [
     AX_CHECK_COMPILE_FLAG([-fno-asynchronous-unwind-tables], [
       [CFLAGS="$CFLAGS -fno-asynchronous-unwind-tables"]
     ])
@@ -285,7 +285,7 @@ AS_CASE([$host_os],
 AS_IF([test "x$enable_ssp" != "xno"],[
 
 AS_CASE([$host_os],
-  [cygwin*|mingw*|msys|pw32*|cegcc*|haiku|none], [ ],
+  [cygwin*|mingw*|msys|pw32*|cegcc*|haiku|none|eabi*], [ ],
   [*], [
     AX_CHECK_COMPILE_FLAG([-fstack-protector], [
       AX_CHECK_LINK_FLAG([-fstack-protector],
@@ -362,22 +362,49 @@ AC_SUBST(LIBTOOL_DEPS)
 AC_ARG_VAR([AR], [path to the ar utility])
 AC_CHECK_TOOL([AR], [ar], [ar])
 
-dnl Checks for headers
+dnl Checks for headers and codegen feature flags
+
+target_cpu_aarch64=no
+AC_MSG_CHECKING(for ARM64 target)
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([
+#ifndef __aarch64__
+#error Not aarch64
+#endif
+#include <arm_neon.h>
+   ], [(void) 0])],
+   [AC_MSG_RESULT(yes)
+    target_cpu_aarch64=yes],
+   [AC_MSG_RESULT(no)
+    target_cpu_aarch64=no])
 
 AS_IF([test "x$EMSCRIPTEN" = "x"], [
 
-  AS_IF([test "$host_cpu" = "aarch64"], [
-    oldcflags="$CFLAGS"
-    AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [CFLAGS="$CFLAGS -march=armv8-a+crypto"])
+  AS_IF([test "x$target_cpu_aarch64" = "xyes"], [
+    have_armcrypto=no
     AC_MSG_CHECKING(for ARM crypto instructions set)
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-#include <arm_neon.h>
-]], [[ vaeseq_u8(vmovq_n_u8(0), vmovq_n_u8(__ARM_FEATURE_CRYPTO)) ]])],
-      [AC_MSG_RESULT(yes)
-       AC_DEFINE([HAVE_ARMCRYPTO], [1], [ARM crypto extensions are available])
-       AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [CFLAGS_ARMCRYPTO="-march=armv8-a+crypto"])],
-      [AC_MSG_RESULT(no)])
-    CFLAGS="$oldcflags"
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <arm_neon.h>]], [[ vaeseq_u8(vmovq_n_u8(0), vmovq_n_u8(__ARM_FEATURE_CRYPTO)) ]])],
+      [
+        AC_MSG_RESULT(yes)
+        have_armcrypto=yes
+      ],
+      [
+        AC_MSG_RESULT(no)
+        oldcflags="$CFLAGS"
+        AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [
+          CFLAGS="$CFLAGS -march=armv8-a+crypto"
+          AC_MSG_CHECKING(for ARM crypto instructions set with -march=armv8-a+crypto)
+          AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <arm_neon.h>]], [[ vaeseq_u8(vmovq_n_u8(0), vmovq_n_u8(__ARM_FEATURE_CRYPTO)) ]])],
+            [
+              AC_MSG_RESULT(yes)
+              have_armcrypto=yes
+              CFLAGS_ARMCRYPTO="-march=armv8-a+crypto"
+            ],
+            [AC_MSG_RESULT(no)])
+          CFLAGS="$oldcflags"
+        ])
+      ])
+      AS_IF([test "$have_armcrypto" = "yes"],[AC_DEFINE([HAVE_ARMCRYPTO], [1], [ARM crypto extensions are available])])
   ])
 
   oldcflags="$CFLAGS"
@@ -837,7 +864,7 @@ if (&getentropy != NULL) {
 ])
 AC_CHECK_FUNCS([posix_memalign getpid nanosleep])
 AC_CHECK_FUNCS([memset_s explicit_bzero explicit_memset])
-AC_CHECK_FUNCS([getauxval])
+AC_CHECK_FUNCS([getauxva elf_aux_info])
 
 AC_SUBST([LIBTOOL_EXTRA_FLAGS])
 
