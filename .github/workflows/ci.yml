@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Update packages list
+        run: sudo apt-get update
+
       - name: Install dependencies
         run: sudo apt-get install -y build-essential libtool autoconf automake tcc
 
@@ -32,6 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
+      - name: Update packages list
+        run: sudo apt-get update
 
       - name: Install dependencies
         run: sudo apt-get install -y build-essential libtool autoconf automake
@@ -59,6 +65,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Update packages list
+        run: sudo apt-get update
+
       - name: Install dependencies
         run: sudo apt-get install -y build-essential libtool autoconf automake
 
@@ -67,12 +76,15 @@ jobs:
 
       - name: Check globals
         run: |
-          test/rename-globals.sh
+          if [ -x test/rename-globals.sh ]; then test/rename-globals.sh; fi
 
   other-comp:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
+      - name: Update packages list
+        run: sudo apt-get update
 
       - name: Install dependencies
         run: sudo apt-get install -y build-essential libtool autoconf automake clang
@@ -97,6 +109,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Update packages list
+        run: sudo apt-get update
+
       - name: Install dependencies
         run: sudo apt-get install -y build-essential libtool autoconf automake qemu-user-static gcc-powerpc-linux-gnu
 
@@ -108,3 +123,28 @@ jobs:
           env CPPFLAGS="-DDEV_MODE=1" ./configure --disable-dependency-tracking --host=powerpc-linux-gnu
           make -j $(nproc)
           make clean > /dev/null
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Update packages list
+        run: sudo apt-get update
+
+      - name: Install base dependencies
+        run: sudo apt-get install -y libtool autoconf automake unzip
+
+      - name: Autogen
+        run: ./autogen.sh -s
+
+      - name: Install Android NDK
+        run: |
+          mkdir /tmp/android && cd /tmp/android
+          curl -o ndk.zip -L https://dl.google.com/android/repository/android-ndk-r23-beta2-linux-x86_64.zip
+          unzip ndk.zip && rm -f *.zip && mv android-ndk* ndk
+
+      - name: Android compilation
+        run: |
+          env ANDROID_NDK_HOME=/tmp/android/ndk ./dist-build/android-x86.sh
+          env ANDROID_NDK_HOME=/tmp/android/ndk ./dist-build/android-armv8-a.sh
